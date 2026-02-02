@@ -6,100 +6,93 @@ import io
 import os
 import tempfile
 import json
-import textwrap
-from typing import List, Dict, Any
-import base64
-
-# Try to import PDF processing libraries
-try:
-    import PyPDF2
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-    st.warning("PyPDF2 not available - PDF uploads will be limited")
-
-try:
-    import pdfplumber
-    PDFPLUMBER_AVAILABLE = True
-except ImportError:
-    PDFPLUMBER_AVAILABLE = False
-
-# Try to import optional visualization libraries
-try:
-    import plotly.graph_objects as go
-    import plotly.express as px
-    PLOTLY_AVAILABLE = True
-except ImportError:
-    PLOTLY_AVAILABLE = False
+import re
 
 # Page configuration
 st.set_page_config(
-    page_title="Philips Holter Monitor Analysis Guide with AI Assistant",
+    page_title="Philips Holter Analysis Guide",
     page_icon="🫀",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'https://www.philips.com/healthcare',
-        'Report a bug': 'https://github.com/yourusername/holter-guide/issues',
-        'About': """
-        # Philips Holter Analysis Guide v2.0
-        
-        Clinical decision support tool with AI-powered PDF analysis.
-        
-        For educational purposes. Always consult official documentation.
-        """
-    }
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS with enhanced styling
+# Custom CSS
 st.markdown("""
 <style>
     .main-header {
         font-size: 2.5rem;
         color: #00539B;
-        font-weight: 800;
+        font-weight: bold;
         text-align: center;
         margin-bottom: 1.5rem;
-        padding-bottom: 15px;
+        padding-bottom: 10px;
         border-bottom: 3px solid #00539B;
-        background: linear-gradient(90deg, #00539B, #0083B0);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
     }
-    
     .sub-header {
         font-size: 1.8rem;
         color: #00539B;
-        font-weight: 700;
-        margin-top: 1.8rem;
-        margin-bottom: 1.2rem;
-        padding-left: 15px;
-        border-left: 5px solid #00539B;
+        font-weight: bold;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+        padding-left: 10px;
+        border-left: 4px solid #00539B;
     }
-    
-    .ai-response {
-        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    .task-card {
+        background: linear-gradient(135deg, #f5f9ff 0%, #e6f0ff 100%);
         padding: 20px;
         border-radius: 10px;
-        border-left: 5px solid #4caf50;
-        margin: 20px 0;
-        box-shadow: 0 2px 4px rgba(76,175,80,0.2);
+        border-left: 5px solid #00539B;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    
-    .pdf-content {
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    .tip-box {
+        background-color: #fff8e1;
         padding: 15px;
         border-radius: 8px;
-        margin: 10px 0;
+        border-left: 5px solid #ffb300;
+        margin: 15px 0;
+    }
+    .warning-box {
+        background-color: #ffebee;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #f44336;
+        margin: 15px 0;
+    }
+    .success-box {
+        background-color: #e8f5e9;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #4caf50;
+        margin: 15px 0;
+    }
+    .info-box {
+        background-color: #e3f2fd;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 5px solid #2196f3;
+        margin: 15px 0;
+    }
+    .ai-response {
+        background-color: #f3e5f5;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #9c27b0;
+        margin: 20px 0;
+    }
+    .pdf-content {
+        background-color: #f5f5f5;
+        padding: 15px;
+        border-radius: 8px;
         font-family: 'Courier New', monospace;
         font-size: 0.9em;
         max-height: 300px;
         overflow-y: auto;
+        border: 1px solid #ddd;
     }
-    
     .code-block {
-        background: #2d2d2d;
-        color: #f8f8f2;
+        background-color: #1e1e1e;
+        color: #d4d4d4;
         padding: 15px;
         border-radius: 8px;
         font-family: 'Courier New', monospace;
@@ -107,35 +100,25 @@ st.markdown("""
         overflow-x: auto;
         margin: 10px 0;
     }
-    
-    .task-card {
-        background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
-        padding: 25px;
-        border-radius: 12px;
-        border-left: 6px solid #00539B;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    .tip-box {
-        background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
-        padding: 20px;
-        border-radius: 10px;
-        border-left: 5px solid #ffb300;
-        margin: 20px 0;
-    }
-    
     .step-number {
         display: inline-block;
-        background: linear-gradient(135deg, #00539B, #0083B0);
+        background-color: #00539B;
         color: white;
-        width: 32px;
-        height: 32px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
         text-align: center;
-        line-height: 32px;
+        line-height: 30px;
         font-weight: bold;
-        margin-right: 15px;
+        margin-right: 10px;
+    }
+    .metric-box {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        text-align: center;
+        border-top: 5px solid #00539B;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -147,38 +130,36 @@ if 'user_data' not in st.session_state:
         'bookmarks': [],
         'uploaded_pdfs': [],
         'chat_history': [],
-        'extracted_texts': {}
+        'extracted_texts': {},
+        'generated_functions': []
     }
 
 if 'analysis_data' not in st.session_state:
     st.session_state.analysis_data = {
         'current_patient': None,
-        'analysis_started': False
+        'analysis_started': False,
+        'patient_data': {}
     }
 
 # PDF Processing Functions
 def extract_text_from_pdf(pdf_file):
-    """Extract text from PDF using available libraries"""
+    """Extract text from PDF file"""
     text = ""
-    
     try:
-        if PDFPLUMBER_AVAILABLE:
-            with pdfplumber.open(pdf_file) as pdf:
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
-        elif PDF_AVAILABLE:
+        # Try to import PyPDF2
+        try:
+            import PyPDF2
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             for page in pdf_reader.pages:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-        else:
-            return "PDF processing libraries not available. Please install PyPDF2 or pdfplumber."
-    
+        except ImportError:
+            text = "PyPDF2 not available. Please install with: pip install PyPDF2"
+        except Exception as e:
+            text = f"Error extracting text: {str(e)}"
     except Exception as e:
-        return f"Error extracting text: {str(e)}"
+        text = f"Error: {str(e)}"
     
     return text
 
@@ -187,16 +168,15 @@ def analyze_pdf_content(text, max_length=5000):
     if len(text) > max_length:
         text = text[:max_length] + "... [truncated]"
     
-    # Basic analysis - in a real app, you might use NLP here
+    # Basic analysis
     lines = text.split('\n')
     
     analysis = {
         'total_lines': len(lines),
         'total_words': len(text.split()),
         'estimated_pages': len(text) // 2500 + 1,
-        'has_ecg_terms': any(term in text.lower() for term in ['ecg', 'ekg', 'holter', 'arrhythmia', 'cardiac']),
-        'has_medical_terms': any(term in text.lower() for term in ['patient', 'diagnosis', 'treatment', 'medication', 'clinical']),
-        'first_lines': lines[:10],
+        'has_ecg_terms': any(term in text.lower() for term in ['ecg', 'ekg', 'holter', 'arrhythmia', 'cardiac', 'heart']),
+        'has_medical_terms': any(term in text.lower() for term in ['patient', 'diagnosis', 'treatment', 'medication', 'clinical', 'therapy']),
         'sample_text': text[:1000] if len(text) > 1000 else text
     }
     
@@ -204,333 +184,484 @@ def analyze_pdf_content(text, max_length=5000):
 
 def generate_function_from_description(description):
     """Generate Python function based on description"""
-    # This is a simplified version - in production, you'd use AI/ML models
     
-    # Template for common Holter analysis functions
-    function_templates = {
-        'detect': """
-def {function_name}(ecg_data, threshold={threshold}):
-    \"\"\"
-    Detect {condition} in ECG data.
+    # Clean description
+    desc_lower = description.lower().strip()
+    
+    # Detect function type
+    if any(word in desc_lower for word in ['detect', 'find', 'identify', 'check']):
+        func_type = 'detection'
+        func_name = 'detect_' + desc_lower.split()[1] if len(desc_lower.split()) > 1 else 'detect_pattern'
+    elif any(word in desc_lower for word in ['calculate', 'compute', 'measure', 'quantify']):
+        func_type = 'calculation'
+        func_name = 'calculate_' + desc_lower.split()[1] if len(desc_lower.split()) > 1 else 'calculate_value'
+    elif any(word in desc_lower for word in ['analyze', 'process', 'evaluate', 'assess']):
+        func_type = 'analysis'
+        func_name = 'analyze_' + desc_lower.split()[1] if len(desc_lower.split()) > 1 else 'analyze_data'
+    elif any(word in desc_lower for word in ['generate', 'create', 'build', 'make']):
+        func_type = 'generation'
+        func_name = 'generate_' + desc_lower.split()[1] if len(desc_lower.split()) > 1 else 'generate_output'
+    else:
+        func_type = 'utility'
+        func_name = 'process_' + desc_lower.split()[0] if desc_lower.split() else 'custom_function'
+    
+    # Clean function name
+    func_name = re.sub(r'[^a-zA-Z0-9_]', '_', func_name)
+    
+    # Generate appropriate function
+    if func_type == 'detection':
+        function_code = f'''
+def {func_name}(data, threshold=0.5, window_size=10):
+    """
+    Detect {description}
     
     Parameters:
-    -----------
-    ecg_data : pd.DataFrame
-        ECG data with columns: ['time', 'lead_i', 'lead_ii', 'lead_v5']
-    threshold : float
+    data : numpy.ndarray or pd.DataFrame
+        Input data for detection
+    threshold : float, default=0.5
         Detection threshold
+    window_size : int, default=10
+        Analysis window size
         
     Returns:
-    --------
-    dict
-        Dictionary with detection results
-    \"\"\"
+    dict with detection results
+    """
     import numpy as np
-    import pandas as pd
     
     results = {{
         'detected': False,
-        'episodes': [],
-        'total_duration': 0,
-        'confidence': 0.0
+        'confidence': 0.0,
+        'locations': [],
+        'metadata': {{
+            'threshold_used': threshold,
+            'window_size': window_size,
+            'description': "{description}"
+        }}
     }}
     
-    # Placeholder detection logic
-    # In real implementation, add your detection algorithm here
+    # Convert to numpy array if needed
+    if hasattr(data, 'values'):
+        data_array = data.values
+    else:
+        data_array = np.array(data)
     
+    # Simple detection logic (placeholder)
+    if len(data_array) > window_size:
+        variances = []
+        for i in range(0, len(data_array) - window_size + 1, window_size):
+            window = data_array[i:i+window_size]
+            variances.append(np.var(window))
+        
+        avg_variance = np.mean(variances)
+        if avg_variance > threshold:
+            results['detected'] = True
+            results['confidence'] = min(avg_variance, 1.0)
+            
     return results
-""",
-        'analyze': """
-def {function_name}(data, parameters={parameters}):
-    \"\"\"
-    Analyze {analysis_type} from Holter data.
+'''
+    
+    elif func_type == 'calculation':
+        function_code = f'''
+def {func_name}(*args, **kwargs):
+    """
+    Calculate {description}
     
     Parameters:
-    -----------
-    data : dict or pd.DataFrame
+    *args : variable length arguments
+    **kwargs : keyword arguments
+        
+    Returns:
+    float or dict with calculated value(s)
+    """
+    import numpy as np
+    
+    method = kwargs.get('method', 'standard')
+    precision = kwargs.get('precision', 4)
+    
+    try:
+        if args:
+            values = np.array(args)
+            if method == 'mean':
+                result = np.mean(values)
+            elif method == 'sum':
+                result = np.sum(values)
+            elif method == 'median':
+                result = np.median(values)
+            else:
+                result = np.mean(values)
+        
+        result = round(float(result), precision)
+        
+        return {{
+            'value': result,
+            'method': method,
+            'precision': precision,
+            'description': "{description}"
+        }}
+        
+    except Exception as e:
+        return {{
+            'error': str(e),
+            'value': None,
+            'description': "{description}"
+        }}
+'''
+    
+    elif func_type == 'analysis':
+        function_code = f'''
+def {func_name}(data, parameters=None):
+    """
+    Analyze {description}
+    
+    Parameters:
+    data : various
         Input data for analysis
-    parameters : dict
+    parameters : dict, optional
         Analysis parameters
         
     Returns:
-    --------
-    dict
-        Analysis results
-    \"\"\"
+    dict with analysis results
+    """
+    import numpy as np
+    import pandas as pd
+    
+    if parameters is None:
+        parameters = {{
+            'analysis_type': 'basic',
+            'normalize': True,
+            'return_stats': True
+        }}
+    
     results = {{
-        'analysis_type': '{analysis_type}',
-        'parameters_used': parameters,
+        'analysis_type': parameters.get('analysis_type', 'basic'),
+        'parameters': parameters,
+        'description': "{description}",
         'results': {{}},
-        'status': 'completed'
+        'success': False
     }}
     
-    # Placeholder analysis logic
-    # Add your analysis code here
+    try:
+        if isinstance(data, pd.DataFrame):
+            df = data
+        elif isinstance(data, np.ndarray):
+            df = pd.DataFrame(data)
+        elif isinstance(data, dict):
+            df = pd.DataFrame(data)
+        else:
+            df = pd.DataFrame({{'data': data}})
+        
+        stats = df.describe().to_dict()
+        
+        results['results'] = {{
+            'summary_statistics': stats,
+            'data_shape': df.shape,
+            'data_types': df.dtypes.to_dict(),
+            'missing_values': df.isnull().sum().to_dict()
+        }}
+        
+        results['success'] = True
+        
+    except Exception as e:
+        results['error'] = str(e)
     
     return results
-""",
-        'calculate': """
-def {function_name}(*args, **kwargs):
-    \"\"\"
-    Calculate {calculation} from input parameters.
-    
-    Returns:
-    --------
-    float or dict
-        Calculated value or results
-    \"\"\"
-    # Placeholder calculation
-    # Add your calculation logic here
-    
-    return 0.0
-"""
-    }
-    
-    # Simple keyword matching to choose template
-    description_lower = description.lower()
-    
-    if any(word in description_lower for word in ['detect', 'find', 'identify']):
-        template_key = 'detect'
-        function_name = 'detect_' + description_lower.split()[0] if len(description_lower.split()) > 0 else 'detect_pattern'
-        threshold = 0.5
-        condition = description_lower.replace('detect', '').strip() or 'pattern'
-        
-        return function_templates[template_key].format(
-            function_name=function_name,
-            threshold=threshold,
-            condition=condition
-        )
-    
-    elif any(word in description_lower for word in ['analyze', 'process', 'evaluate']):
-        template_key = 'analyze'
-        function_name = 'analyze_' + description_lower.split()[0] if len(description_lower.split()) > 0 else 'analyze_data'
-        analysis_type = description_lower.replace('analyze', '').strip() or 'data'
-        parameters = "{'window_size': 10, 'sampling_rate': 200}"
-        
-        return function_templates[template_key].format(
-            function_name=function_name,
-            analysis_type=analysis_type,
-            parameters=parameters
-        )
+'''
     
     else:
-        # Default template for calculations
-        return """
-def process_{description}(input_data):
-    \"\"\"
+        function_code = f'''
+def {func_name}(input_data, config=None):
+    """
     Process: {description}
     
     This function was generated based on your description.
-    Modify it according to your specific needs.
-    \"\"\"
-    # TODO: Implement the logic for: {description}
     
-    # Example structure:
-    results = {
-        'input_processed': True,
-        'description': '{description}',
-        'output': None  # Replace with actual output
-    }
+    Parameters:
+    input_data : various
+        Input data to process
+    config : dict, optional
+        Configuration parameters
+        
+    Returns:
+    dict with processing results
+    """
+    if config is None:
+        config = {{
+            'verbose': False,
+            'validate_input': True
+        }}
+    
+    results = {{
+        'function': "{func_name}",
+        'description': "{description}",
+        'config': config,
+        'input_received': True if input_data is not None else False,
+        'output': None,
+        'status': 'completed'
+    }}
+    
+    # Add your processing logic here
+    
+    results['output'] = {{
+        'processed': True,
+        'note': 'Template function - implement your logic here'
+    }}
     
     return results
-""".format(description=description.replace(' ', '_').lower())
+'''
+    
+    return function_code.strip()
 
 def answer_question_based_on_text(question, pdf_text, context=""):
     """Generate answer based on PDF text and question"""
     
-    # Simple keyword-based answering
-    # In production, you would use more sophisticated NLP
-    
-    keywords = {
-        'ecg': ['electrocardiogram', 'heart rate', 'rhythm', 'beat', 'qrs', 'qt'],
-        'holter': ['24-hour', 'monitor', 'recording', 'ambulatory', 'portable'],
-        'arrhythmia': ['irregular', 'abnormal', 'tachycardia', 'bradycardia', 'afib', 'flutter'],
-        'analysis': ['process', 'analyze', 'evaluate', 'interpret', 'review']
-    }
-    
-    answer_template = """
-Based on the provided PDF content and your question about "{question}", here's what I can determine:
-
-**PDF Analysis:**
-- Total content extracted: {word_count} words
-- Medical relevance: {medical_relevance}
-- Contains ECG/Holter terms: {has_ecg}
-
-**Answer:**
-{answer_text}
-
-**Suggested Actions:**
-- Review the complete PDF for detailed information
-- Consult clinical guidelines for protocol specifics
-- Verify measurements with supervising physician
-"""
-
-    # Generate answer based on keywords
     pdf_lower = pdf_text.lower()
     question_lower = question.lower()
     
-    has_ecg = any(term in pdf_lower for term in keywords['ecg'])
-    has_holter = any(term in pdf_lower for term in keywords['holter'])
+    # Check for ECG/Holter terms
+    ecg_terms = ['ecg', 'ekg', 'electrocardiogram', 'holter', 'cardiac', 'heart rate', 'arrhythmia']
+    has_ecg = any(term in pdf_lower for term in ecg_terms)
     
-    if has_ecg and has_holter:
-        answer_text = "The document appears to contain Holter monitor/ECG related content. "
-    elif has_ecg:
-        answer_text = "The document contains ECG/cardiac related information. "
+    # Check for analysis terms
+    analysis_terms = ['analyze', 'analysis', 'detect', 'measure', 'calculate', 'evaluate']
+    is_analysis = any(term in question_lower for term in analysis_terms)
+    
+    # Generate appropriate response
+    if has_ecg:
+        base_answer = "Based on the ECG/Holter-related content in the document, "
     else:
-        answer_text = "The document may not be specifically about ECG/Holter monitoring. "
+        base_answer = "Based on the document content, "
     
-    # Add specific responses based on question
-    if 'how' in question_lower:
-        answer_text += "For procedural questions, please refer to the step-by-step instructions in the manual sections."
-    elif 'what' in question_lower:
-        answer_text += "The document describes various aspects of cardiac monitoring and analysis."
-    elif 'why' in question_lower:
-        answer_text += "Clinical justifications are typically provided in guideline sections."
+    if is_analysis:
+        answer = base_answer + f"I can help you {question_lower}. "
+        answer += "For analysis procedures, you can use the AI Function Generator to create custom analysis functions. "
+    elif question_lower.startswith('how'):
+        answer = base_answer + "The procedure typically involves: \n\n"
+        answer += "1. Data acquisition and preprocessing\n"
+        answer += "2. Feature extraction from signals\n"
+        answer += "3. Applying detection algorithms\n"
+        answer += "4. Validating results with clinical standards\n"
+    elif question_lower.startswith('what'):
+        answer = base_answer + "This refers to cardiac monitoring techniques for detecting arrhythmias and other heart conditions over extended periods."
+    elif question_lower.startswith('why'):
+        answer = base_answer + "This is important for early detection of cardiac abnormalities, monitoring treatment efficacy, and preventing serious cardiac events."
+    else:
+        answer = base_answer + "The document contains relevant information for Holter monitor analysis. For specific details, please refer to the extracted text."
     
-    # Count words
-    word_count = len(pdf_text.split())
+    # Add context if provided
+    if context:
+        answer += f"\n\n**Context provided:** {context}"
     
-    return answer_template.format(
-        question=question,
-        word_count=word_count,
-        medical_relevance="High" if has_ecg else "Low/Medium",
-        has_ecg="Yes" if has_ecg else "No",
-        answer_text=answer_text
-    )
+    # Add suggestions
+    answer += "\n\n**Suggested Actions:**\n"
+    answer += "1. Review the extracted PDF text for detailed information\n"
+    answer += "2. Use the AI Function Generator for automated analysis\n"
+    answer += "3. Consult clinical guidelines for validation\n"
+    
+    return answer
 
-# Main Application Functions
-def main():
-    """Main application function"""
+# Sample Data Generation
+def generate_sample_ecg_data():
+    """Generate synthetic ECG data"""
+    fs = 200
+    t = np.arange(0, 10, 1/fs)
     
-    # Header
-    st.markdown('<div class="main-header">🫀 Philips Holter Guide with AI Assistant</div>', unsafe_allow_html=True)
+    # Generate ECG components
+    p_wave = 0.3 * np.sin(2 * np.pi * 1 * t)
+    qrs = 1.5 * np.exp(-((t % 1) - 0.3)**2 / 0.001)
+    t_wave = 0.4 * np.exp(-((t % 1) - 0.5)**2 / 0.002)
+    noise = 0.05 * np.random.randn(len(t))
     
-    # Sidebar navigation
-    with st.sidebar:
-        st.title("📋 Navigation")
-        
-        # User profile
-        with st.expander("👤 User Profile", expanded=False):
-            st.session_state.user_data['role'] = st.selectbox(
-                "Role:",
-                ["Cardiologist", "Cardiac Technician", "Trainee", "Researcher", "Administrator"]
-            )
-        
-        # Main navigation
-        st.markdown("---")
-        page = st.radio(
-            "### 📚 Select Page:",
-            [
-                "🏠 Home Dashboard",
-                "📄 PDF Analysis & Q&A",
-                "🤖 AI Function Generator",
-                "💓 AF Detection Guide",
-                "📊 ST Analysis",
-                "📝 Report Generation",
-                "📚 Reference Guide"
-            ]
-        )
-        
-        # Uploaded PDFs
-        if st.session_state.user_data['uploaded_pdfs']:
-            st.markdown("---")
-            st.markdown("### 📚 Uploaded PDFs")
-            for pdf in st.session_state.user_data['uploaded_pdfs'][:3]:
-                st.caption(f"• {pdf}")
-        
-        # Quick stats
-        st.markdown("---")
-        st.markdown("### 📊 Quick Stats")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("PDFs", len(st.session_state.user_data['uploaded_pdfs']))
-        with col2:
-            st.metric("Functions", "12")
+    ecg = p_wave + qrs + t_wave + noise
     
-    # Page routing
-    if page == "🏠 Home Dashboard":
-        home_dashboard()
-    elif page == "📄 PDF Analysis & Q&A":
-        pdf_analysis_page()
-    elif page == "🤖 AI Function Generator":
-        ai_function_generator_page()
-    elif page == "💓 AF Detection Guide":
-        af_detection_page()
-    elif page == "📝 Report Generation":
-        report_generation_page()
-    elif page == "📚 Reference Guide":
-        reference_guide_page()
-    elif page == "📊 ST Analysis":
-        st_analysis_page()
-    
-    # Footer
-    display_footer()
+    return pd.DataFrame({
+        'Time (s)': t,
+        'ECG Signal (mV)': ecg,
+        'Heart Rate (bpm)': 60 + 20 * np.sin(2 * np.pi * 0.1 * t)
+    })
 
+def generate_sample_patient_data():
+    """Generate sample patient data"""
+    patients = []
+    conditions = ['Normal', 'AF', 'PVC', 'Bradycardia', 'Tachycardia']
+    
+    for i in range(8):
+        condition = np.random.choice(conditions)
+        patients.append({
+            'ID': f'PAT-{1000 + i}',
+            'Name': f'Patient {i+1}',
+            'Age': np.random.randint(35, 85),
+            'Gender': np.random.choice(['M', 'F']),
+            'Condition': condition,
+            'Recording Hours': np.random.choice([24, 48, 72]),
+            'AF Burden (%)': round(np.random.uniform(0, 30), 1) if condition == 'AF' else 0,
+            'Status': np.random.choice(['Completed', 'In Progress', 'Needs Review'])
+        })
+    
+    return pd.DataFrame(patients)
+
+def generate_sample_report():
+    """Generate a sample Holter report"""
+    report = f"""
+PHILIPS HOLTER MONITOR ANALYSIS REPORT
+=======================================
+
+Report Date: {datetime.now().strftime('%Y-%m-%d')}
+Report ID: HLR-{np.random.randint(10000, 99999)}
+
+PATIENT INFORMATION
+-------------------
+Patient ID: PAT-{np.random.randint(1000, 9999)}
+Name: [Patient Name]
+Age: {np.random.randint(40, 80)}
+Gender: {np.random.choice(['Male', 'Female'])}
+Recording Duration: {np.random.choice(['24 hours', '48 hours', '72 hours'])}
+
+ANALYSIS SUMMARY
+----------------
+Total Beats Analyzed: {np.random.randint(80000, 120000):,}
+Average Heart Rate: {np.random.randint(60, 85)} bpm
+Maximum Heart Rate: {np.random.randint(120, 180)} bpm
+Minimum Heart Rate: {np.random.randint(40, 55)} bpm
+
+ARRHYTHMIA FINDINGS
+-------------------
+- Atrial Fibrillation: {np.random.choice(['Present', 'Absent', 'Occasional'])}
+- Ventricular Ectopy: {np.random.randint(0, 1000)} beats
+- Supraventricular Ectopy: {np.random.randint(0, 500)} beats
+- Pauses: {np.random.randint(0, 5)} > 2.0 seconds
+
+ST SEGMENT ANALYSIS
+-------------------
+- ST Deviation: {np.random.choice(['Normal', 'Minimal', 'Significant'])}
+- Ischemic Episodes: {np.random.randint(0, 3)}
+
+HEART RATE VARIABILITY
+----------------------
+- SDNN: {np.random.randint(80, 180)} ms
+- RMSSD: {np.random.randint(20, 60)} ms
+- pNN50: {np.random.randint(5, 25)}%
+
+CLINICAL IMPRESSION
+-------------------
+{np.random.choice([
+    'Normal Holter study',
+    'Intermittent atrial fibrillation noted',
+    'Frequent ventricular ectopy',
+    'Sinus rhythm with occasional PACs/PVCs',
+    'No significant arrhythmias detected'
+])}
+
+RECOMMENDATIONS
+---------------
+1. {np.random.choice([
+    'Clinical correlation recommended',
+    'Consider cardiology referral',
+    'Repeat Holter in 6 months',
+    'No further action required'
+])}
+
+---
+Report Generated by: Philips Holter Analysis System
+"""
+    return report
+
+# Page Functions
 def home_dashboard():
     """Home dashboard page"""
-    col1, col2, col3 = st.columns(3)
+    st.markdown('<div class="main-header">🫀 Philips Holter Analysis Guide</div>', unsafe_allow_html=True)
     
+    # Welcome message
+    col1, col2 = st.columns([3, 1])
     with col1:
-        st.metric("Active Patients", "24", "+3")
+        st.markdown(f"### Welcome, {st.session_state.user_data['role']}!")
+        st.markdown("*Your comprehensive guide for Philips Holter monitor analysis*")
     with col2:
-        st.metric("PDFs Analyzed", len(st.session_state.user_data['uploaded_pdfs']))
-    with col3:
-        st.metric("AI Functions", "8", "+2")
+        st.metric("Today's Date", datetime.now().strftime('%Y-%m-%d'))
     
+    # Dashboard metrics
+    st.markdown('<div class="sub-header">📊 Dashboard Overview</div>', unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Analysis Tasks", "12")
+    with col2:
+        st.metric("Scanning Modes", "8")
+    with col3:
+        st.metric("PDFs Uploaded", len(st.session_state.user_data['uploaded_pdfs']))
+    with col4:
+        st.metric("Support", "24/7")
+    
+    # Quick actions
     st.markdown('<div class="sub-header">🚀 Quick Actions</div>', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("📤 Upload PDF", use_container_width=True):
-            st.session_state.current_page = "📄 PDF Analysis & Q&A"
-            st.rerun()
+        if st.button("📤 Upload PDF Document", use_container_width=True):
+            st.info("Navigate to PDF Analysis tab")
     with col2:
-        if st.button("🤖 Generate Function", use_container_width=True):
-            st.session_state.current_page = "🤖 AI Function Generator"
-            st.rerun()
+        if st.button("🤖 Generate Analysis Function", use_container_width=True):
+            st.info("Navigate to AI Function Generator tab")
     with col3:
-        if st.button("📊 Analyze Data", use_container_width=True):
-            st.info("Data analysis started...")
+        if st.button("📊 View Sample Analysis", use_container_width=True):
+            st.info("Navigate to AF Detection Guide")
     
-    # Recent activity
-    st.markdown('<div class="sub-header">📈 Recent Activity</div>', unsafe_allow_html=True)
+    # Recent patients
+    st.markdown('<div class="sub-header">👥 Recent Patients</div>', unsafe_allow_html=True)
+    patient_df = generate_sample_patient_data()
+    st.dataframe(patient_df, use_container_width=True, hide_index=True)
     
-    if st.session_state.user_data['chat_history']:
-        for chat in st.session_state.user_data['chat_history'][-3:]:
-            st.text_area("", f"Q: {chat['question'][:100]}...\nA: {chat['answer'][:200]}...", 
-                        height=100, disabled=True)
-    else:
-        st.info("No recent activity. Upload a PDF or ask a question to get started.")
+    # System overview
+    st.markdown('<div class="sub-header">🖥️ System Overview</div>', unsafe_allow_html=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+        <div class="info-box">
+        <strong>Software Capabilities:</strong>
+        <ul>
+        <li>Automatic arrhythmia detection</li>
+        <li>ST segment analysis</li>
+        <li>Heart rate variability</li>
+        <li>Pacemaker analysis</li>
+        <li>Custom report generation</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("""
+        <div class="tip-box">
+        <strong>💡 Quick Tips:</strong>
+        <ul>
+        <li>Use Retrospective mode for comprehensive AF detection</li>
+        <li>Always verify automated detections manually</li>
+        <li>Check patient diary for symptom correlation</li>
+        <li>Export reports in multiple formats</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
 def pdf_analysis_page():
     """PDF Analysis and Q&A page"""
     st.markdown('<div class="sub-header">📄 PDF Analysis & Q&A Assistant</div>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📤 Upload PDF", "❓ Ask Questions", "📊 PDF Insights"])
+    tab1, tab2, tab3 = st.tabs(["📤 Upload & Extract", "❓ Ask Questions", "📊 PDF Insights"])
     
     with tab1:
-        st.markdown("### Upload PDF for Analysis")
+        st.markdown("### Upload Philips Holter Documentation")
         
         uploaded_file = st.file_uploader("Choose a PDF file", type="pdf", 
-                                       help="Upload Philips Holter manuals, research papers, or clinical guidelines")
+                                       help="Upload manuals, clinical guidelines, or research papers")
         
         if uploaded_file is not None:
-            # Save file info
-            file_details = {
-                "filename": uploaded_file.name,
-                "filetype": uploaded_file.type,
-                "filesize": uploaded_file.size
-            }
-            
-            col1, col2 = st.columns(2)
+            # Display file info
+            col1, col2 = st.columns([2, 1])
             with col1:
-                st.write("**File Details:**")
-                st.write(f"Name: {file_details['filename']}")
-                st.write(f"Size: {file_details['filesize']} bytes")
+                st.write(f"**File:** {uploaded_file.name}")
+                st.write(f"**Size:** {uploaded_file.size:,} bytes")
             
             with col2:
-                # Extract text button
-                if st.button("🔍 Extract & Analyze Text", use_container_width=True):
+                if st.button("🔍 Extract Text", use_container_width=True):
                     with st.spinner("Extracting text from PDF..."):
                         # Extract text
                         text = extract_text_from_pdf(uploaded_file)
@@ -539,128 +670,116 @@ def pdf_analysis_page():
                         analysis = analyze_pdf_content(text)
                         
                         # Store in session state
-                        if uploaded_file.name not in st.session_state.user_data['extracted_texts']:
-                            st.session_state.user_data['extracted_texts'][uploaded_file.name] = {
-                                'text': text,
-                                'analysis': analysis,
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            }
+                        st.session_state.user_data['extracted_texts'][uploaded_file.name] = {
+                            'text': text,
+                            'analysis': analysis,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
                         
-                        # Add to uploaded PDFs list
+                        # Add to uploaded list
                         if uploaded_file.name not in st.session_state.user_data['uploaded_pdfs']:
                             st.session_state.user_data['uploaded_pdfs'].append(uploaded_file.name)
                         
-                        st.success("✅ PDF analyzed successfully!")
-                        
-                        # Show analysis results
-                        st.markdown("### 📊 Analysis Results")
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.metric("Total Words", analysis['total_words'])
-                            st.metric("Estimated Pages", analysis['estimated_pages'])
-                        with col2:
-                            st.metric("Medical Relevance", "High" if analysis['has_medical_terms'] else "Low")
-                            st.metric("ECG Content", "Yes" if analysis['has_ecg_terms'] else "No")
+                        st.success(f"✅ Extracted {analysis['total_words']:,} words from PDF")
             
-            # Show sample text if available
+            # Show extracted text if available
             if uploaded_file.name in st.session_state.user_data['extracted_texts']:
-                st.markdown("### 📄 Sample Text (First 1000 characters)")
-                sample_text = st.session_state.user_data['extracted_texts'][uploaded_file.name]['text'][:1000]
-                st.markdown(f'<div class="pdf-content">{sample_text}...</div>', unsafe_allow_html=True)
+                st.markdown("### 📄 Extracted Content Preview")
+                
+                data = st.session_state.user_data['extracted_texts'][uploaded_file.name]
+                analysis = data['analysis']
+                
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Words", f"{analysis['total_words']:,}")
+                with col2:
+                    st.metric("Lines", analysis['total_lines'])
+                with col3:
+                    st.metric("ECG Content", "Yes" if analysis['has_ecg_terms'] else "No")
+                with col4:
+                    st.metric("Medical Terms", "Yes" if analysis['has_medical_terms'] else "No")
+                
+                # Show sample text
+                with st.expander("View Extracted Text", expanded=False):
+                    st.markdown(f'<div class="pdf-content">{analysis["sample_text"]}</div>', unsafe_allow_html=True)
     
     with tab2:
-        st.markdown("### ❓ Ask Questions About Uploaded PDFs")
+        st.markdown("### Ask Questions About Your PDFs")
         
-        # Select PDF to query
         if st.session_state.user_data['uploaded_pdfs']:
             selected_pdf = st.selectbox(
                 "Select a PDF to query:",
                 st.session_state.user_data['uploaded_pdfs']
             )
             
-            question = st.text_area("Enter your question:", 
-                                  placeholder="e.g., What does this PDF say about AF detection thresholds?")
+            question = st.text_area("Your question:", 
+                                  placeholder="e.g., What does this document say about AF detection thresholds?")
             
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                context = st.text_area("Additional context (optional):",
-                                     placeholder="e.g., I'm particularly interested in R-R interval analysis...")
+            context = st.text_area("Additional context (optional):",
+                                 placeholder="e.g., I'm particularly interested in R-R interval analysis...",
+                                 height=100)
             
-            with col2:
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🤖 Get Answer", use_container_width=True):
-                    if selected_pdf in st.session_state.user_data['extracted_texts']:
-                        pdf_text = st.session_state.user_data['extracted_texts'][selected_pdf]['text']
+            if st.button("🤖 Get Answer", use_container_width=True):
+                if selected_pdf in st.session_state.user_data['extracted_texts']:
+                    pdf_text = st.session_state.user_data['extracted_texts'][selected_pdf]['text']
+                    
+                    with st.spinner("Analyzing PDF and generating answer..."):
+                        answer = answer_question_based_on_text(question, pdf_text, context)
                         
-                        with st.spinner("Analyzing PDF and generating answer..."):
-                            answer = answer_question_based_on_text(question, pdf_text, context)
-                            
-                            # Store in chat history
-                            st.session_state.user_data['chat_history'].append({
-                                'pdf': selected_pdf,
-                                'question': question,
-                                'answer': answer,
-                                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            })
-                            
-                            # Display answer
-                            st.markdown('<div class="ai-response">', unsafe_allow_html=True)
-                            st.markdown(answer)
+                        # Store in chat history
+                        st.session_state.user_data['chat_history'].append({
+                            'pdf': selected_pdf,
+                            'question': question,
+                            'answer': answer[:500] + "..." if len(answer) > 500 else answer,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        })
+                        
+                        # Display answer
+                        st.markdown('<div class="ai-response">', unsafe_allow_html=True)
+                        st.markdown(answer)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Option to generate function
+                        if st.checkbox("Generate a Python function based on this answer?"):
+                            function_code = generate_function_from_description(answer[:100])
+                            st.markdown("### 🐍 Generated Function")
+                            st.markdown('<div class="code-block">', unsafe_allow_html=True)
+                            st.code(function_code, language='python')
                             st.markdown('</div>', unsafe_allow_html=True)
                             
-                            # Option to generate function from answer
-                            if st.checkbox("Generate a function based on this answer?"):
-                                function_code = generate_function_from_description(answer[:200])
-                                st.markdown("### 🐍 Generated Function")
-                                st.code(function_code, language='python')
-                                
-                                # Download option
-                                st.download_button(
-                                    label="📥 Download Function",
-                                    data=function_code,
-                                    file_name="generated_function.py",
-                                    mime="text/x-python"
-                                )
-                    else:
-                        st.error("Please extract text from the PDF first (go to Upload PDF tab).")
+                            # Download button
+                            st.download_button(
+                                label="📥 Download Function",
+                                data=function_code,
+                                file_name="generated_function.py",
+                                mime="text/x-python"
+                            )
+                else:
+                    st.error("Please extract text from the PDF first.")
         else:
-            st.info("Please upload a PDF first to ask questions.")
+            st.info("Please upload a PDF first in the 'Upload & Extract' tab.")
     
     with tab3:
-        st.markdown("### 📊 PDF Insights Dashboard")
+        st.markdown("### 📊 PDF Analysis Dashboard")
         
         if st.session_state.user_data['extracted_texts']:
-            # Create insights dashboard
+            # Create insights table
             insights_data = []
-            
             for filename, data in st.session_state.user_data['extracted_texts'].items():
+                analysis = data['analysis']
                 insights_data.append({
                     'PDF Name': filename,
-                    'Word Count': data['analysis']['total_words'],
-                    'Lines': data['analysis']['total_lines'],
-                    'ECG Content': 'Yes' if data['analysis']['has_ecg_terms'] else 'No',
-                    'Medical Terms': 'Yes' if data['analysis']['has_medical_terms'] else 'No',
+                    'Words': analysis['total_words'],
+                    'Lines': analysis['total_lines'],
+                    'ECG Content': '✓' if analysis['has_ecg_terms'] else '✗',
+                    'Medical': '✓' if analysis['has_medical_terms'] else '✗',
                     'Last Analyzed': data['timestamp']
                 })
             
             insights_df = pd.DataFrame(insights_data)
             st.dataframe(insights_df, use_container_width=True, hide_index=True)
-            
-            # Show word cloud or other visualizations
-            st.markdown("### 📈 Content Overview")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                if insights_df is not None and not insights_df.empty:
-                    st.bar_chart(insights_df.set_index('PDF Name')['Word Count'])
-            
-            with col2:
-                ecg_count = insights_df['ECG Content'].value_counts()
-                if not ecg_count.empty:
-                    st.metric("PDFs with ECG Content", 
-                            f"{ecg_count.get('Yes', 0)}/{len(insights_df)}")
         else:
-            st.info("No PDFs analyzed yet. Upload and analyze a PDF to see insights.")
+            st.info("No PDFs analyzed yet. Upload and extract text from a PDF to see insights.")
 
 def ai_function_generator_page():
     """AI Function Generator page"""
@@ -669,39 +788,47 @@ def ai_function_generator_page():
     tab1, tab2, tab3 = st.tabs(["💬 Describe Function", "📚 Use PDF Context", "📦 Function Library"])
     
     with tab1:
-        st.markdown("### 💬 Describe Your Function")
+        st.markdown("### Create Custom Analysis Functions")
         
+        # Fixed: Using single quotes for the placeholder
         function_description = st.text_area(
             "Describe the function you need:",
             height=150,
-            placeholder="""Example: "Create a function to detect atrial fibrillation episodes in ECG data based on R-R interval variability with configurable threshold parameters.""""
+            placeholder='Example: "Create a function to detect atrial fibrillation in ECG data based on R-R interval variability"'
         )
         
-        # Additional parameters
+        # Function parameters
         col1, col2 = st.columns(2)
         with col1:
             function_type = st.selectbox(
                 "Function Type:",
-                ["Detection", "Analysis", "Calculation", "Visualization", "Utility", "Report"]
+                ["Detection", "Analysis", "Calculation", "Visualization", "Utility"]
             )
-            return_type = st.selectbox(
-                "Return Type:",
-                ["Dictionary", "DataFrame", "Boolean", "List", "String", "Number", "Plot"]
-            )
+            language = st.selectbox("Language:", ["Python", "Pseudocode"])
         
         with col2:
-            language = st.selectbox("Language:", ["Python", "R", "MATLAB"])
-            complexity = st.select_slider("Complexity:", 
-                                        options=["Simple", "Medium", "Advanced", "Expert"])
+            complexity = st.select_slider(
+                "Complexity:",
+                options=["Simple", "Intermediate", "Advanced"]
+            )
         
-        # Generate function button
-        if st.button("🚀 Generate Function", use_container_width=True):
+        # Generate function
+        if st.button("🚀 Generate Function Code", use_container_width=True):
             if function_description:
                 with st.spinner("Generating function code..."):
-                    # Generate function based on description
+                    # Generate function
                     function_code = generate_function_from_description(function_description)
                     
-                    # Display generated function
+                    # Store in session state
+                    func_name = function_code.split('def ')[1].split('(')[0]
+                    st.session_state.user_data['generated_functions'].append({
+                        'name': func_name,
+                        'description': function_description,
+                        'code': function_code,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    })
+                    
+                    # Display function
                     st.markdown("### 🐍 Generated Python Function")
                     st.markdown('<div class="code-block">', unsafe_allow_html=True)
                     st.code(function_code, language='python')
@@ -711,55 +838,66 @@ def ai_function_generator_page():
                     st.markdown("#### 📋 Function Details")
                     col1, col2 = st.columns(2)
                     with col1:
+                        st.info(f"**Name:** {func_name}")
                         st.info(f"**Type:** {function_type}")
-                        st.info(f"**Complexity:** {complexity}")
                     with col2:
-                        st.info(f"**Return Type:** {return_type}")
+                        st.info(f"**Complexity:** {complexity}")
                         st.info(f"**Language:** {language}")
                     
                     # Download options
+                    st.markdown("#### 📥 Download Options")
                     col1, col2, col3 = st.columns(3)
                     with col1:
                         st.download_button(
-                            label="📥 Download .py",
+                            label="📄 Python File (.py)",
                             data=function_code,
-                            file_name="generated_function.py",
+                            file_name=f"{func_name}.py",
                             mime="text/x-python"
                         )
                     with col2:
                         # Create test template
-                        test_template = f"""
-import pytest
-from generated_function import {function_code.split('def ')[1].split('(')[0]}
-
-def test_generated_function():
-    \"\"\"Test the generated function\"\"\"
-    # TODO: Add test cases
-    test_data = {{}}
-    result = {function_code.split('def ')[1].split('(')[0]}(test_data)
-    assert result is not None
+                        test_template = f'''
 """
+Test for {func_name} function
+"""
+
+def test_{func_name}():
+    """Test the generated function"""
+    import numpy as np
+    
+    # Test data
+    test_data = np.random.randn(1000)
+    
+    # Call function
+    result = {func_name}(test_data)
+    
+    # Basic assertions
+    assert result is not None
+    assert isinstance(result, dict)
+    
+    print(f"✅ {func_name} test passed!")
+    return True
+
+if __name__ == "__main__":
+    test_{func_name}()
+'''
                         st.download_button(
-                            label="🧪 Download Test",
+                            label="🧪 Test File",
                             data=test_template,
-                            file_name="test_generated_function.py",
+                            file_name=f"test_{func_name}.py",
                             mime="text/x-python"
                         )
                     with col3:
                         # Create documentation
                         doc_template = f"""
-# {function_code.split('def ')[1].split('(')[0]} Function Documentation
+# {func_name} Function
 
-## Purpose
+## Description
 {function_description}
 
-## Parameters
-- **parameter1**: Description
-- **parameter2**: Description
-
-## Returns
-{return_type}: Description of return value
-
-## Example Usage
+## Usage
 ```python
-result = {function_code.split('def ')[1].split('(')[0]}(example_data)
+from {func_name} import {func_name}
+
+# Example usage
+result = {func_name}(your_data)
