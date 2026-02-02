@@ -995,13 +995,3 @@ def main():
 if __name__ == "__main__":
     main()
 '''
-
-# Save to file
-output_path = '/mnt/kimi/output/philips_holter_analysis_complete.py'
-with open(output_path, 'w') as f:
-    f.write(complete_app_code)
-
-print("✅ Complete code saved successfully!")
-print(f"📁 File: {output_path}")
-print(f"📊 Total length: {len(complete_app_code)} characters")
-print(f"📄 Total lines: {len(complete_app_code.splitlines())}")
